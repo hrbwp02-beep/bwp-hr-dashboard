@@ -1,10 +1,11 @@
 // dash-app.jsx — BWP HR Dashboard : 5 มุมมองหลักด้านกำลังคน
+// รองรับ: ขอบเขตสิทธิ์รายหน่วยงาน · คลิกกราฟเพื่อเจาะดู/ดูรายชื่อ
 const { useState: useD, useEffect: useDE } = React;
 
 const C1 = "#16a34a", C2 = "#2563eb", C3 = "#7c3aed", C4 = "#e08a00", C5 = "#0891b2";
 
 /* ============ 1. สรุปจำนวนพนักงาน ============ */
-function SecHeadcount() {
+function SecHeadcount({ onDrill, onPeople }) {
   const h = DASH.headcount();
   return (
     <Card>
@@ -18,9 +19,12 @@ function SecHeadcount() {
           { label: "พนักงานสัญญาจ้าง/รายวัน", value: h.contract, unit: "คน", icon: "jd", color: "#64748b" },
         ]} />
         <div style={{ marginTop: 16 }}>
-          <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>พนักงานแยกตามหน่วยงาน</div>
-          <DDonut rows={h.byDept.map((d) => ({ label: d.short, v: d.v, color: d.color }))}
-            centerLabel="พนักงาน" centerValue={h.current} />
+          <div className="between" style={{ marginBottom: 10 }}>
+            <span className="muted" style={{ fontSize: 11.5, fontWeight: 700 }}>พนักงานแยกตามหน่วยงาน</span>
+            <span className="muted" style={{ fontSize: 11 }}>คลิกเพื่อเจาะดู</span>
+          </div>
+          <DDonut rows={h.byDept} centerLabel="พนักงาน" centerValue={h.current}
+            activeKey={DASH.drill} onPick={(r) => onDrill(r.id)} />
         </div>
       </div>
     </Card>
@@ -28,7 +32,7 @@ function SecHeadcount() {
 }
 
 /* ============ 2. อัตราการลาออก ============ */
-function SecTurnover() {
+function SecTurnover({ onDrill, onPeople }) {
   const t = DASH.turnover();
   return (
     <Card>
@@ -39,15 +43,18 @@ function SecTurnover() {
           <DEmpty icon="checkCircle" text="ยังไม่มีการลาออกในระบบ"
             sub="เมื่อบันทึกพนักงานพ้นสภาพใน HR Core (เมนู พนักงาน → เปลี่ยนสถานะ) กราฟอัตราการลาออกจะคำนวณให้อัตโนมัติ" />
         ) : (<>
-          <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 6 }}>อัตราการลาออกรายเดือน (%)</div>
+          <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 6 }}>
+            อัตราการลาออกรายเดือน (%) <span style={{ fontWeight: 400 }}>· ชี้เมาส์ที่จุดเพื่อดูค่า</span>
+          </div>
           <DLine points={t.months} unit="%" />
           <div style={{ marginTop: 18 }}>
             <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>แยกตามหน่วยงาน (ปีนี้)</div>
-            <DBarH rows={t.byDept} unit="%" showBase />
+            <DBarH rows={t.byDept} unit="%" showBase activeKey={DASH.drill} onPick={(r) => onDrill(r.id)} />
           </div>
           <div style={{ marginTop: 18 }}>
             <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>แยกตามอายุงาน</div>
-            <DBarV rows={t.byTenure.map((b) => ({ label: b.label, v: b.v }))} />
+            <DBarV rows={t.byTenure.map((b) => ({ label: b.label, v: b.v }))}
+              onPick={(r) => onPeople("tenure", r.label, "พนักงานอายุงาน " + r.label)} />
           </div>
         </>)}
       </div>
@@ -58,14 +65,18 @@ function SecTurnover() {
 /* ============ 3. การสรรหาและคัดเลือก ============ */
 function SecRecruit({ recruit }) {
   const s = recruit && recruit.ok ? recruit.stats : null;
-  const f = s ? s.funnel : null;
+  const fw = s ? DASH.recruitFunnel(s) : null;
+  const f = fw ? fw.funnel : null;
+  const positions = s ? DASH.recruitPositions(s) : [];
   return (
     <Card>
       <DHead n="3" color={C3} title="การสรรหาและคัดเลือก" sub="New Hire & Recruitment"
-        right={s ? <Badge cls="b-teal" dot>เชื่อมระบบสรรหา</Badge> : null} />
+        right={s ? <Badge cls="b-teal" dot>{fw.scoped ? "เฉพาะหน่วยงานของคุณ" : "เชื่อมระบบสรรหา"}</Badge> : null} />
       <div className="card-pad">
         {!recruit ? <DEmpty icon="clock" text="กำลังเชื่อมต่อระบบสรรหา…" />
           : !recruit.ok ? <DEmpty icon="alert" text="เชื่อมต่อระบบสรรหาไม่ได้" sub={recruit.error} />
+          : f.applicants === 0 ? <DEmpty icon="users" text="ยังไม่มีผู้สมัครในหน่วยงานที่คุณดูแล"
+              sub="เมื่อมีใบสมัครในระบบสรรหาสำหรับหน่วยงานนี้ ตัวเลขจะแสดงที่นี่" />
           : (<>
             <DFunnel stages={[
               { label: "ตำแหน่งที่เปิดรับ", v: f.openings },
@@ -82,7 +93,7 @@ function SecRecruit({ recruit }) {
                   {s.time_to_hire_days != null ? s.time_to_hire_days : "—"}
                   <span style={{ fontSize: 12.5, fontWeight: 400 }}> วัน</span>
                 </div>
-                <div className="muted" style={{ fontSize: 10.5 }}>วันที่สมัคร → วันเริ่มงาน</div>
+                <div className="muted" style={{ fontSize: 10.5 }}>วันที่สมัคร → วันเริ่มงาน (ทั้งบริษัท)</div>
               </div>
               <div style={{ border: "1px dashed var(--border)", borderRadius: 12, padding: "13px 15px", textAlign: "center" }}>
                 <div className="muted" style={{ fontSize: 11.5 }}>ต้นทุนต่อการรับ 1 คน</div>
@@ -91,24 +102,24 @@ function SecRecruit({ recruit }) {
               </div>
             </div>
 
-            {s.open_requests != null && (
+            {!fw.scoped && s.open_requests != null && (
               <div style={{ marginTop: 14, fontSize: 12.5, background: "var(--accent-soft)", color: "var(--accent-700)",
                 borderRadius: 10, padding: "9px 13px" }}>
                 ใบขออัตรากำลังที่ยังเปิดอยู่ <b>{s.open_requests}</b> ใบ · ผู้สมัครที่ยังไม่ผ่านการคัดเลือก{" "}
-                <b>{(s.by_status && (s.by_status["new"] || 0)) + (s.by_status && (s.by_status["interview"] || 0))}</b> คน
+                <b>{((s.by_status || {})["new"] || 0) + ((s.by_status || {})["interview"] || 0)}</b> คน
               </div>
             )}
 
-            {s.top_positions && s.top_positions.length > 0 && (
+            {positions.length > 0 && (
               <div style={{ marginTop: 18 }}>
                 <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>ตำแหน่งที่มีผู้สมัครมากที่สุด</div>
-                <DBarH rows={s.top_positions.map((p, i) => ({
+                <DBarH rows={positions.map((p, i) => ({
                   label: p.position, v: p.applicants, color: DASH.PALETTE[i % DASH.PALETTE.length],
                 }))} />
                 <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
                   ตำแหน่งที่ยังหาคนไม่ได้:{" "}
-                  {s.top_positions.filter((p) => !p.hired).length
-                    ? s.top_positions.filter((p) => !p.hired).map((p) => p.position).join(" · ")
+                  {positions.filter((p) => !p.hired).length
+                    ? positions.filter((p) => !p.hired).map((p) => p.position).join(" · ")
                     : "— ไม่มี —"}
                 </div>
               </div>
@@ -148,14 +159,15 @@ function SecAttendance() {
 }
 
 /* ============ 5. โครงสร้างพนักงาน ============ */
-function SecDemographics() {
+function SecDemographics({ onPeople }) {
   const d = DASH.demographics();
   return (
     <Card>
-      <DHead n="5" color={C5} title="โครงสร้างพนักงาน" sub="Employee Demographics" />
+      <DHead n="5" color={C5} title="โครงสร้างพนักงาน" sub="Employee Demographics"
+        right={<span className="muted" style={{ fontSize: 11 }}>คลิกกราฟดูรายชื่อ</span>} />
       <div className="card-pad">
         <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>ช่วงอายุ</div>
-        <DBarV rows={d.byAge} />
+        <DBarV rows={d.byAge} onPick={(r) => onPeople("age", r.label, "พนักงานช่วงอายุ " + r.label)} />
 
         <div style={{ marginTop: 18 }}>
           <DStatRow items={[
@@ -174,12 +186,13 @@ function SecDemographics() {
 
         <div style={{ marginTop: 18 }}>
           <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>ระดับตำแหน่ง</div>
-          <DDonut rows={d.byLevel} centerLabel="พนักงาน" centerValue={d.total} />
+          <DDonut rows={d.byLevel} centerLabel="พนักงาน" centerValue={d.total}
+            onPick={(r) => onPeople("level", r.label, "พนักงานระดับ " + r.label)} />
         </div>
 
         <div style={{ marginTop: 18 }}>
           <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 10 }}>ช่วงวัย (Generation)</div>
-          <DBarH rows={d.byGen.map((g) => ({ label: g.label, v: g.v, color: g.color }))} />
+          <DBarH rows={d.byGen} onPick={(r) => onPeople("gen", r.label, "พนักงาน " + r.label)} />
         </div>
       </div>
     </Card>
@@ -191,7 +204,9 @@ function DashApp() {
   const [phase, setPhase] = useD("boot");
   const [err, setErr] = useD("");
   const [recruit, setRecruit] = useD(null);
+  const [people, setPeople] = useD(null);   // {title, sub, rows}
   const [, force] = useD(0);
+  const redraw = () => force((n) => n + 1);
 
   const boot = async () => {
     setPhase("boot"); setErr("");
@@ -209,7 +224,12 @@ function DashApp() {
   const reload = async () => {
     await DASH.load(); setRecruit(null);
     DASH.loadRecruit().then(setRecruit);
-    force((n) => n + 1); toast("อัปเดตข้อมูลแล้ว", "refresh");
+    redraw(); toast("อัปเดตข้อมูลแล้ว", "refresh");
+  };
+  const onDrill = (id) => { DASH.setDrill(id); redraw(); };
+  const onPeople = (kind, key, title) => {
+    const rows = DASH.listBy(kind, key);
+    setPeople({ title, sub: DASH.scopeLabel(), rows });
   };
 
   if (phase === "boot") return (<><DashSplash /><ToastHost /></>);
@@ -229,6 +249,7 @@ function DashApp() {
 
   const u = DASH.user || {};
   const h = DASH.headcount();
+  const drillable = DASH.drillableDepts();
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -238,7 +259,9 @@ function DashApp() {
             <img src="logo.svg" alt="BWP" style={{ width: 40, height: 40 }} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 16.5 }}>แดชบอร์ดกำลังคน</div>
-              <div className="muted" style={{ fontSize: 12 }}>BWP HR Dashboard · ข้อมูล ณ {new Date().toLocaleDateString("th-TH")}</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {DASH.scope.all ? "ทั้งองค์กร" : "เฉพาะหน่วยงานที่คุณดูแล"} · ข้อมูล ณ {new Date().toLocaleDateString("th-TH")}
+              </div>
             </div>
           </div>
           <div className="row wrap" style={{ gap: 8 }}>
@@ -253,32 +276,66 @@ function DashApp() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "20px 20px 60px" }}>
+      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 20px 60px" }}>
+        {/* แถบตัวกรอง/เจาะดูหน่วยงาน */}
+        {drillable.length > 1 && (
+          <div className="row wrap" style={{ gap: 7, marginBottom: 14, alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: 12, marginRight: 2 }}>เจาะดู:</span>
+            <button onClick={() => onDrill(null)} className="chip-btn"
+              style={chipStyle(!DASH.drill)}>ทั้งหมด</button>
+            {drillable.map((d) => (
+              <button key={d.id} onClick={() => onDrill(d.id)} className="chip-btn"
+                style={chipStyle(DASH.drill === d.id)}>{d.short || d.name}</button>
+            ))}
+          </div>
+        )}
+        {DASH.drill && (
+          <div className="row" style={{ gap: 9, marginBottom: 14, background: "var(--accent-soft)",
+            color: "var(--accent-700)", borderRadius: 11, padding: "10px 14px", fontSize: 13 }}>
+            <Icon name="search" size={16} />
+            <span>กำลังดูเฉพาะ <b>{DASH.deptName(DASH.drill)}</b></span>
+            <div className="spacer" style={{ flex: 1 }} />
+            <button className="btn btn-ghost btn-sm" onClick={() => onDrill(null)}>ล้างตัวกรอง</button>
+          </div>
+        )}
+
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", marginBottom: 18 }}>
-          <Stat icon="users" label="พนักงานทั้งหมด" value={h.current} unit="คน" tone={C1} soft="#e7f6ec" />
+          <Stat icon="users" label="พนักงานทั้งหมด" value={h.current} unit="คน" tone={C1} soft="#e7f6ec" sub={DASH.scopeLabel()} />
           <Stat icon="employee" label="เข้าใหม่ปีนี้" value={h.newYtd} unit="คน" tone={C2} soft="#e8effb" />
           <Stat icon="logout" label="ลาออกปีนี้" value={h.resignYtd} unit="คน" tone="#e11d48" soft="#fde8ec" />
           <Stat icon="briefcase" label="หน่วยงาน" value={h.byDept.length} tone={C5} soft="#e0f2ef" />
         </div>
 
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(330px,1fr))", alignItems: "start" }}>
-          <SecHeadcount />
-          <SecTurnover />
+          <SecHeadcount onDrill={onDrill} onPeople={onPeople} />
+          <SecTurnover onDrill={onDrill} onPeople={onPeople} />
           <SecRecruit recruit={recruit} />
           <SecAttendance />
-          <SecDemographics />
+          <SecDemographics onPeople={onPeople} />
         </div>
 
         <div style={{ marginTop: 22, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14,
           padding: "16px 20px", fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.85 }}>
           <b style={{ color: "var(--text)" }}>ที่มาของข้อมูล</b> — ข้อ 1, 2, 5 คำนวณสดจากทะเบียนพนักงานใน HR Core ·
           ข้อ 3 ดึงตัวเลขรวมจากระบบสรรหา (ไม่มีข้อมูลส่วนบุคคล) · ข้อ 4 รอระบบลาและบันทึกเวลาทำงาน<br />
-          ตัวเลขทั้งหมดมาจากข้อมูลจริงในระบบ ไม่มีการประมาณค่า — ส่วนที่ยังไม่มีข้อมูลจะแสดงว่ายังไม่มี ไม่เดาแทน
+          ตัวเลขทั้งหมดมาจากข้อมูลจริงในระบบ ไม่มีการประมาณค่า — ส่วนที่ยังไม่มีข้อมูลจะแสดงว่ายังไม่มี ไม่เดาแทน<br />
+          {!DASH.scope.all && <><b style={{ color: "var(--text)" }}>ขอบเขตข้อมูล</b> — บัญชีของคุณเห็นเฉพาะ {DASH.scopeLabel()} ตามสิทธิ์ที่ HR กำหนด</>}
         </div>
       </main>
+
+      {people && <DPeople title={people.title} sub={people.sub} rows={people.rows} onClose={() => setPeople(null)} />}
       <ToastHost />
     </div>
   );
+}
+
+function chipStyle(on) {
+  return {
+    fontSize: 12.5, fontWeight: 600, padding: "6px 13px", borderRadius: 999, cursor: "pointer",
+    border: "1px solid " + (on ? "transparent" : "var(--border)"),
+    background: on ? "var(--accent)" : "var(--surface)",
+    color: on ? "#fff" : "var(--text-2)",
+  };
 }
 
 function DashSplash() {

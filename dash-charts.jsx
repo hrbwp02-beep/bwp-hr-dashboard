@@ -2,15 +2,18 @@
 const { useState: useD1 } = React;
 
 /* แถบแนวนอน + ค่าตัวเลข */
-function DBarH({ rows, unit, max, showBase }) {
+function DBarH({ rows, unit, max, showBase, onPick, activeKey }) {
   const m = max != null ? max : Math.max(1, ...rows.map((r) => r.v));
   if (!rows.length) return <DEmpty text="ยังไม่มีข้อมูล" />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
       {rows.map((r) => (
-        <div key={r.label} className="row" style={{ gap: 10, alignItems: "center" }}>
-          <span style={{ fontSize: 12.5, minWidth: 96, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-            title={r.label}>{r.label}</span>
+        <div key={r.label} className="row" onClick={onPick ? () => onPick(r) : undefined}
+          title={onPick ? "คลิกเพื่อเจาะดู " + r.label : r.label}
+          style={{ gap: 10, alignItems: "center", cursor: onPick ? "pointer" : "default",
+                   background: activeKey && activeKey === (r.id || r.label) ? "var(--accent-soft)" : "transparent",
+                   borderRadius: 7, padding: onPick ? "3px 5px" : 0, margin: onPick ? "0 -5px" : 0 }}>
+          <span style={{ fontSize: 12.5, minWidth: 96, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
           <div style={{ flex: 1, height: 16, borderRadius: 5, background: "var(--surface-3)", overflow: "hidden" }}>
             <div style={{ width: Math.min(100, (r.v / m) * 100) + "%", height: "100%", background: r.color || "var(--accent)", borderRadius: 5, transition: "width .4s" }} />
           </div>
@@ -24,12 +27,14 @@ function DBarH({ rows, unit, max, showBase }) {
 }
 
 /* แท่งแนวตั้ง (ช่วงอายุ) */
-function DBarV({ rows, unit }) {
+function DBarV({ rows, unit, onPick }) {
   const m = Math.max(1, ...rows.map((r) => r.v));
   return (
     <div className="row" style={{ gap: 8, alignItems: "flex-end", justifyContent: "space-around", minHeight: 150 }}>
       {rows.map((r, i) => (
-        <div key={r.label} style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+        <div key={r.label} onClick={onPick ? () => onPick(r) : undefined}
+          title={onPick ? "คลิกเพื่อดูรายชื่อ " + r.label : r.label + " : " + r.v}
+          style={{ flex: 1, textAlign: "center", minWidth: 0, cursor: onPick ? "pointer" : "default" }}>
           <div className="mono" style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{r.v}</div>
           <div style={{ height: 96, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
             <div title={r.label + " : " + r.v} style={{ width: "68%", maxWidth: 42, height: Math.max(4, (r.v / m) * 94),
@@ -107,7 +112,7 @@ function DFunnel({ stages }) {
 }
 
 /* โดนัทอย่างง่าย (ใช้เมื่อไม่ต้องการ legend ของ charts.jsx) */
-function DDonut({ rows, centerLabel, centerValue }) {
+function DDonut({ rows, centerLabel, centerValue, onPick, activeKey }) {
   const total = rows.reduce((a, r) => a + r.v, 0);
   if (!total) return <DEmpty text="ยังไม่มีข้อมูล" />;
   const R = 54, C = 2 * Math.PI * R;
@@ -118,8 +123,11 @@ function DDonut({ rows, centerLabel, centerValue }) {
         <g transform="translate(70,70) rotate(-90)">
           {rows.map((r) => {
             const len = (r.v / total) * C;
-            const el = <circle key={r.label} r={R} fill="none" stroke={r.color} strokeWidth="20"
-              strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc} />;
+            const on = activeKey && activeKey === (r.id || r.label);
+            const el = <circle key={r.label} r={R} fill="none" stroke={r.color} strokeWidth={on ? 26 : 20}
+              strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc}
+              style={{ cursor: onPick ? "pointer" : "default", transition: "stroke-width .15s" }}
+              onClick={onPick ? () => onPick(r) : undefined}><title>{r.label + " : " + r.v}</title></circle>;
             acc += len; return el;
           })}
         </g>
@@ -128,7 +136,11 @@ function DDonut({ rows, centerLabel, centerValue }) {
       </svg>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 140 }}>
         {rows.map((r) => (
-          <div key={r.label} className="between" style={{ gap: 12, fontSize: 12.5 }}>
+          <div key={r.label} className="between" onClick={onPick ? () => onPick(r) : undefined}
+            title={onPick ? "คลิกเพื่อดูรายชื่อ " + r.label : r.label}
+            style={{ gap: 12, fontSize: 12.5, cursor: onPick ? "pointer" : "default",
+                     background: activeKey && activeKey === (r.id || r.label) ? "var(--accent-soft)" : "transparent",
+                     borderRadius: 6, padding: onPick ? "2px 6px" : 0, margin: onPick ? "0 -6px" : 0 }}>
             <span className="row" style={{ gap: 7, minWidth: 0 }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color, flex: "0 0 10px" }} />
               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
@@ -189,3 +201,57 @@ function DHead({ n, title, sub, color, right }) {
 }
 
 Object.assign(window, { DBarH, DBarV, DLine, DFunnel, DDonut, DStatRow, DEmpty, DHead });
+
+/* ---------- หน้าต่างรายชื่อพนักงาน (เปิดเมื่อคลิกกราฟ) ---------- */
+function DPeople({ title, sub, rows, onClose }) {
+  const [q, setQ] = useD1("");
+  const list = (rows || []).filter((e) => {
+    if (!q.trim()) return true;
+    const s = q.trim().toLowerCase();
+    return String(e.name || "").toLowerCase().includes(s) ||
+           String(e.employee_code || e.id).includes(s) ||
+           String(e.position || "").toLowerCase().includes(s);
+  });
+  const exportCsv = () => {
+    window.downloadCSV("employees_" + (title || "list") + ".csv",
+      ["รหัส", "ชื่อ", "ตำแหน่ง", "หน่วยงาน", "ระดับ", "อายุ", "วันเริ่มงาน"],
+      list.map((e) => [e.employee_code || e.id, e.name, e.position || "", DASH.deptName(e.dept),
+        e.level || "", e.age == null ? "" : e.age, e.hire_date || ""]));
+    toast("ส่งออก " + list.length + " รายชื่อแล้ว", "download");
+  };
+  return (
+    <Modal title={title} onClose={onClose}
+      footer={<>
+        <button className="btn btn-ghost" onClick={onClose}>ปิด</button>
+        <button className="btn btn-pri" onClick={exportCsv}><Icon name="download" size={15} />ส่งออก CSV</button>
+      </>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="between" style={{ gap: 10 }}>
+          <span className="muted" style={{ fontSize: 13 }}>{sub} · {list.length} คน</span>
+        </div>
+        <input className="input" placeholder="ค้นหาชื่อ / รหัส / ตำแหน่ง" value={q}
+          onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาพนักงาน" />
+        {list.length === 0 ? <DEmpty icon="search" text="ไม่พบพนักงาน" /> : (
+          <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+            {list.map((e) => (
+              <div key={e.id} className="between" style={{ padding: "9px 4px", borderBottom: "1px solid var(--border-2)", gap: 10 }}>
+                <div className="row" style={{ gap: 9, minWidth: 0 }}>
+                  <Avatar name={e.name} initials={(e.name || "?").trim()[0]} color={e.color || "#2563eb"} size={28} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{e.name}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>
+                      {e.position || "—"} · {DASH.deptShort(e.dept)}
+                    </div>
+                  </div>
+                </div>
+                <span className="mono muted" style={{ fontSize: 11 }}>{e.employee_code || e.id}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+Object.assign(window, { DPeople });

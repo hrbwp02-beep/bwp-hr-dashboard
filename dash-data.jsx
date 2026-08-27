@@ -1,4 +1,5 @@
 // dash-data.jsx — ชั้นข้อมูลของแดชบอร์ด HR (คำนวณจากข้อมูลจริงเท่านั้น)
+// รองรับ: ขอบเขตสิทธิ์รายหน่วยงาน (scope) + การเจาะดูรายหน่วยงาน (drill-down)
 const DASH = {};
 
 DASH.HUB = "https://hrbwp02-beep.github.io/bwp-hr-connect/";
@@ -11,31 +12,69 @@ DASH.isWorking = (e) => DASH.WORKING.indexOf(DASH.statusOf(e)) > -1;
 DASH.r1 = (x) => Math.round(x * 10) / 10;
 DASH.pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
 
-/* ---------- โหลดข้อมูล ---------- */
+/* ---------- ผู้ใช้ + ขอบเขตสิทธิ์ ---------- */
 DASH.loadUser = async () => {
   const { data } = await window.sb.auth.getUser();
   const email = ((data && data.user && data.user.email) || "").toLowerCase();
   if (!email) return null;
   const { data: u } = await window.sb.from("app_users").select("*").ilike("email", email).maybeSingle();
   DASH.user = u || { email, name: email.split("@")[0], role: "viewer" };
+
+  // admin/hr เห็นทั้งองค์กร · บทบาทอื่นเห็นเฉพาะหน่วยงานที่รับผิดชอบ
+  const role = String(DASH.user.role || "").toLowerCase();
+  const roleCode = String(DASH.user.role_code || "").toUpperCase();
+  const isAll = ["admin", "hr"].indexOf(role) > -1 || ["SUPER_ADMIN", "HR_ADMIN", "HR"].indexOf(roleCode) > -1;
+  const scoped = Array.isArray(DASH.user.dept_scope) && DASH.user.dept_scope.length
+    ? DASH.user.dept_scope
+    : (DASH.user.dept ? [DASH.user.dept] : []);
+  DASH.scope = { all: isAll, depts: isAll ? [] : scoped };
   return DASH.user;
 };
 
+DASH.inScope = (deptId) => DASH.scope.all || DASH.scope.depts.indexOf(deptId) > -1;
+
+/* ---------- โหลดข้อมูล ---------- */
 DASH.load = async () => {
-  const [emps, depts, etypes] = await Promise.all([
+  const [emps, depts, etypes, dmap] = await Promise.all([
     window.sb.from("employees").select("*"),
     window.sb.from("departments").select("*").order("sort"),
     window.sb.from("employment_types").select("*").order("sort"),
+    window.sb.from("recruit_dept_map").select("recruit_dept, dept_id"),
   ]);
   const err = [emps, depts, etypes].find((r) => r.error);
   if (err) throw new Error(err.error.message);
 
-  DASH.departments = depts.data || [];
+  DASH.allDepartments = depts.data || [];
+  DASH.departments = DASH.allDepartments.filter((d) => DASH.inScope(d.id));
   DASH.employmentTypes = etypes.data || [];
-  DASH.deptMap = {}; DASH.departments.forEach((d) => { DASH.deptMap[d.id] = d; });
+  DASH.deptMap = {}; DASH.allDepartments.forEach((d) => { DASH.deptMap[d.id] = d; });
   DASH.etypeMap = {}; DASH.employmentTypes.forEach((t) => { DASH.etypeMap[t.id] = t; });
-  DASH.employees = (emps.data || []).map((e) => ({ ...e, _st: DASH.statusOf(e) }));
+
+  // แผนที่ชื่อหน่วยงานฝั่งสรรหา → รหัสหน่วยงาน HR Core (ใช้กรองสถิติสรรหาตามสิทธิ์)
+  DASH.recruitDeptMap = {};
+  (dmap.data || []).forEach((m) => { if (m.dept_id) DASH.recruitDeptMap[m.recruit_dept] = m.dept_id; });
+
+  DASH.allEmployees = (emps.data || []).map((e) => ({ ...e, _st: DASH.statusOf(e) }));
+  DASH.drill = null;                 // หน่วยงานที่กำลังเจาะดู (null = ทั้งขอบเขต)
   return DASH;
+};
+
+// พนักงานที่ "มองเห็นได้" = อยู่ในสิทธิ์ และตรงกับหน่วยงานที่เจาะดูอยู่
+DASH.visible = () => (DASH.allEmployees || []).filter((e) =>
+  DASH.inScope(e.dept) && (!DASH.drill || e.dept === DASH.drill));
+
+// หน่วยงานที่เลือกเจาะได้ (ตามสิทธิ์)
+DASH.drillableDepts = () => (DASH.departments || []).filter((d) =>
+  (DASH.allEmployees || []).some((e) => e.dept === d.id));
+
+DASH.setDrill = (id) => { DASH.drill = (DASH.drill === id ? null : id) || null; };
+DASH.deptName = (id) => (DASH.deptMap[id] ? DASH.deptMap[id].name : (id || "—"));
+DASH.deptShort = (id) => (DASH.deptMap[id] ? (DASH.deptMap[id].short || DASH.deptMap[id].name) : (id || "—"));
+DASH.scopeLabel = () => {
+  if (DASH.drill) return DASH.deptName(DASH.drill);
+  if (DASH.scope.all) return "ทั้งองค์กร";
+  const n = (DASH.departments || []).map((d) => d.short || d.name);
+  return n.length ? n.join(" · ") : "หน่วยงานของคุณ";
 };
 
 // สถิติสรรหา (ข้ามระบบ · ตัวเลขรวมเท่านั้น) — ล้มเหลวได้โดยไม่ทำให้แดชบอร์ดพัง
@@ -47,8 +86,27 @@ DASH.loadRecruit = async () => {
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 };
 
-DASH.deptName = (id) => (DASH.deptMap[id] ? DASH.deptMap[id].name : (id || "—"));
-DASH.deptShort = (id) => (DASH.deptMap[id] ? (DASH.deptMap[id].short || DASH.deptMap[id].name) : (id || "—"));
+// รวมกรวยสรรหาเฉพาะหน่วยงานที่มองเห็นได้
+DASH.recruitFunnel = (stats) => {
+  if (!stats) return null;
+  if (DASH.scope.all && !DASH.drill) return { funnel: stats.funnel, scoped: false };
+  const want = DASH.drill ? [DASH.drill] : DASH.scope.depts;
+  const sum = { openings: 0, applicants: 0, interviewed: 0, offered: 0, started: 0 };
+  Object.entries(stats.funnel_by_dept || {}).forEach(([rd, f]) => {
+    const id = DASH.recruitDeptMap[rd];
+    if (id && want.indexOf(id) > -1) {
+      sum.openings += f.openings || 0; sum.applicants += f.applicants || 0;
+      sum.interviewed += f.interviewed || 0; sum.offered += f.offered || 0; sum.started += f.started || 0;
+    }
+  });
+  return { funnel: sum, scoped: true };
+};
+DASH.recruitPositions = (stats) => {
+  const list = (stats && stats.top_positions) || [];
+  if (DASH.scope.all && !DASH.drill) return list.slice(0, 6);
+  const want = DASH.drill ? [DASH.drill] : DASH.scope.depts;
+  return list.filter((p) => { const id = DASH.recruitDeptMap[p.dept]; return id && want.indexOf(id) > -1; }).slice(0, 6);
+};
 
 /* ---------- คำนวณตัวชี้วัด ---------- */
 DASH.tenureYears = (e) => {
@@ -61,11 +119,12 @@ DASH.tenureYears = (e) => {
 
 // 1) สรุปกำลังคน
 DASH.headcount = () => {
-  const all = DASH.employees || [];
+  const all = DASH.visible();
   const y = new Date().getFullYear();
   const working = all.filter(DASH.isWorking);
   const byDept = (DASH.departments || []).map((d, i) => ({
-    label: d.name, short: d.short || d.name, v: working.filter((e) => e.dept === d.id).length,
+    id: d.id, label: d.short || d.name, full: d.name,
+    v: (DASH.allEmployees || []).filter((e) => e.dept === d.id && DASH.isWorking(e)).length,
     color: d.color || DASH.PALETTE[i % DASH.PALETTE.length],
   })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
   const contractIds = (DASH.employmentTypes || [])
@@ -83,13 +142,12 @@ DASH.headcount = () => {
 
 // 2) อัตราการลาออก
 DASH.turnover = () => {
-  const all = DASH.employees || [];
+  const all = DASH.visible();
   const now = new Date();
   const months = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-    // กำลังคนต้นเดือน = คนที่เข้างานก่อนเดือนนี้ และยังไม่ออกก่อนเดือนนี้
     const head = all.filter((e) => e.hire_date && new Date(e.hire_date) < next &&
       (!e.resign_date || new Date(e.resign_date) >= d)).length;
     const left = all.filter((e) => e.resign_date &&
@@ -97,14 +155,16 @@ DASH.turnover = () => {
     months.push({ label: DASH.MONTHS_TH[d.getMonth()], year: d.getFullYear(), head, left, rate: DASH.pct(left, head) });
   }
   const leavers = all.filter((e) => e.resign_date);
-  const y = new Date().getFullYear();
+  const y = now.getFullYear();
   const leaversYtd = leavers.filter((e) => new Date(e.resign_date).getFullYear() === y);
   const working = all.filter(DASH.isWorking).length;
 
   const byDept = (DASH.departments || []).map((d, i) => {
-    const base = all.filter((e) => e.dept === d.id).length;
-    const n = leaversYtd.filter((e) => e.dept === d.id).length;
-    return { label: d.short || d.name, v: DASH.pct(n, base), n, base, color: d.color || DASH.PALETTE[i % DASH.PALETTE.length] };
+    const base = (DASH.allEmployees || []).filter((e) => e.dept === d.id).length;
+    const n = (DASH.allEmployees || []).filter((e) => e.dept === d.id && e.resign_date &&
+      new Date(e.resign_date).getFullYear() === y).length;
+    return { id: d.id, label: d.short || d.name, v: DASH.pct(n, base), n, base,
+      color: d.color || DASH.PALETTE[i % DASH.PALETTE.length] };
   }).filter((x) => x.base > 0).sort((a, b) => b.v - a.v);
 
   const bands = [["< 1 ปี", 0, 1], ["1-3 ปี", 1, 3], ["3-5 ปี", 3, 5], ["> 5 ปี", 5, 999]];
@@ -125,12 +185,13 @@ DASH.turnover = () => {
 
 // 5) โครงสร้างพนักงาน
 DASH.demographics = () => {
-  const w = (DASH.employees || []).filter(DASH.isWorking);
+  const w = DASH.visible().filter(DASH.isWorking);
   const total = w.length;
   const ageBands = [["< 25 ปี", 0, 25], ["25-34 ปี", 25, 35], ["35-44 ปี", 35, 45], ["45-54 ปี", 45, 55], ["> 54 ปี", 55, 200]];
+  const withAge = w.filter((e) => e.age != null).length;
   const byAge = ageBands.map(([label, lo, hi]) => {
     const n = w.filter((e) => e.age != null && e.age >= lo && e.age < hi).length;
-    return { label, v: n, pct: DASH.pct(n, w.filter((e) => e.age != null).length) };
+    return { label, v: n, pct: DASH.pct(n, withAge) };
   });
   const tens = w.map(DASH.tenureYears).filter((t) => t != null);
   const male = w.filter((e) => e.gender === "ชาย").length;
@@ -156,12 +217,28 @@ DASH.demographics = () => {
   return {
     total, byAge, byLevel, byGen,
     avgTenure: tens.length ? DASH.r1(tens.reduce((a, b) => a + b, 0) / tens.length) : 0,
-    avgAge: w.filter((e) => e.age != null).length
-      ? DASH.r1(w.filter((e) => e.age != null).reduce((a, e) => a + e.age, 0) / w.filter((e) => e.age != null).length) : 0,
+    avgAge: withAge ? DASH.r1(w.filter((e) => e.age != null).reduce((a, e) => a + e.age, 0) / withAge) : 0,
     male, female, malePct: DASH.pct(male, male + female), femalePct: DASH.pct(female, male + female),
     permPct: DASH.pct(perm, total), contractPct: DASH.pct(total - perm, total),
     noGender: w.filter((e) => !e.gender).length,
   };
+};
+
+// รายชื่อพนักงานตามเงื่อนไขที่คลิก (สำหรับหน้าต่างเจาะดู)
+DASH.listBy = (kind, key) => {
+  const w = DASH.visible().filter(DASH.isWorking);
+  if (kind === "dept") return DASH.visible().filter((e) => e.dept === key && DASH.isWorking(e));
+  if (kind === "level") return w.filter((e) => (e.level || "(ไม่ระบุ)") === key);
+  if (kind === "gen") return w.filter((e) => (e.generation || "(ไม่ระบุ)") === key);
+  if (kind === "age") {
+    const m = { "< 25 ปี": [0, 25], "25-34 ปี": [25, 35], "35-44 ปี": [35, 45], "45-54 ปี": [45, 55], "> 54 ปี": [55, 200] }[key];
+    return m ? w.filter((e) => e.age != null && e.age >= m[0] && e.age < m[1]) : [];
+  }
+  if (kind === "tenure") {
+    const m = { "< 1 ปี": [0, 1], "1-3 ปี": [1, 3], "3-5 ปี": [3, 5], "> 5 ปี": [5, 999] }[key];
+    return m ? w.filter((e) => { const t = DASH.tenureYears(e); return t != null && t >= m[0] && t < m[1]; }) : [];
+  }
+  return [];
 };
 
 window.DASH = DASH;
