@@ -37,7 +37,7 @@ DASH.inScope = (deptId) => DASH.scope.all || DASH.scope.depts.indexOf(deptId) > 
 DASH.load = async () => {
   const [emps, depts, etypes, dmap] = await Promise.all([
     window.sb.from("employees").select("*"),
-    window.sb.from("departments").select("*").order("sort"),
+    window.sb.from("hr_departments").select("*").order("sort"),
     window.sb.from("employment_types").select("*").order("sort"),
     window.sb.from("recruit_dept_map").select("recruit_dept, dept_id"),
   ]);
