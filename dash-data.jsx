@@ -2,7 +2,7 @@
 // รองรับ: ขอบเขตสิทธิ์รายหน่วยงาน (scope) + การเจาะดูรายหน่วยงาน (drill-down)
 const DASH = {};
 
-DASH.HUB = "https://hrbwp02-beep.github.io/bwp-hr-connect/";
+DASH.HUB = "https://bwp-hr-connect.vercel.app/";
 DASH.WORKING = ["ACTIVE", "PROBATION", "ON_LEAVE", "SUSPENDED"];
 DASH.MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 DASH.PALETTE = ["#2563eb", "#0d9488", "#7c3aed", "#e08a00", "#db2777", "#0891b2", "#16a34a", "#64748b", "#e11d48"];

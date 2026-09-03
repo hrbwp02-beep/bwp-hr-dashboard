@@ -2,7 +2,7 @@
 
 แดชบอร์ดกำลังคนสำหรับผู้บริหารและฝ่ายบุคคล — บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด
 
-**เว็บ:** https://hrbwp02-beep.github.io/bwp-hr-dashboard/
+**เว็บ:** https://bwp-hr-dashboard.vercel.app/
 
 ## มุมมองที่แสดง
 1. สรุปจำนวนพนักงาน (Headcount Summary)

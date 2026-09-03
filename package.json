@@ -1,8 +1,7 @@
 {
   "name": "bwp-hr-dashboard",
-  "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "version": "1.0.0",
   "scripts": { "build": "node build.mjs" },
-  "devDependencies": { "esbuild": "^0.23.1" }
+  "devDependencies": { "esbuild": "0.23.1" }
 }
