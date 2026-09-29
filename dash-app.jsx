@@ -167,7 +167,7 @@ function SecAttendance({ onPeople, onDrill }) {
           { label: "อัตราการเข้างาน", value: S.attendRate + "%", tone: "#16a34a" },
           { label: "อัตราการขาดงาน", value: S.absentRate + "%", tone: "#e11d48" },
           { label: "อัตราการลา", value: S.leaveRate + "%", tone: "#7c3aed" },
-          { label: "OT เฉลี่ย/คน", value: S.otPerHead + " ชม.", tone: "#0891b2" },
+          { label: "OT เฉลี่ย/คน (ทั้งงวด)", value: S.otPerHead + " ชม.", tone: "#0891b2" },
         ]} />
 
         <div className="row wrap" style={{ gap: 7, marginTop: 10 }}>
