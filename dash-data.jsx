@@ -86,8 +86,8 @@ DASH.attLeaveTypes = () => {
   ];
   return T.map(([label, f]) => ({
     key: f, label,
-    value: Math.round(rows.reduce((t, r) => t + Number(r[f] || 0), 0) * 10) / 10,
-  })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+    v: Math.round(rows.reduce((t, r) => t + Number(r[f] || 0), 0) * 10) / 10,
+  })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
 };
 
 // OT และการขาดงานรายหน่วยงาน

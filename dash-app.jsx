@@ -131,7 +131,7 @@ function SecRecruit({ recruit }) {
 }
 
 /* ============ 4. การเข้างานและการลา ============ */
-function SecAttendance({ onPeople }) {
+function SecAttendance({ onPeople, onDrill }) {
   const P = DASH.attPeriod;
   const S = P ? DASH.attSummary() : null;
 
@@ -151,9 +151,9 @@ function SecAttendance({ onPeople }) {
   const types = DASH.attLeaveTypes();
   const byDept = DASH.attByDept();
   const otRows = byDept.slice().sort((a, b) => b.otPerHead - a.otPerHead)
-    .map((d) => ({ key: d.key, label: d.label, value: d.otPerHead }));
+    .map((d) => ({ id: d.key, label: d.label, v: d.otPerHead }));
   const absRows = byDept.slice().sort((a, b) => b.absent - a.absent).filter((d) => d.absent > 0)
-    .map((d) => ({ key: d.key, label: d.label, value: d.absent }));
+    .map((d) => ({ id: d.key, label: d.label, v: d.absent }));
 
   const click = (kind, title) => (onPeople ? () => onPeople(kind, title) : undefined);
 
@@ -199,7 +199,7 @@ function SecAttendance({ onPeople }) {
             <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
               OT เฉลี่ยต่อคน รายหน่วยงาน (ชม.)
             </div>
-            <DBarH rows={otRows} unit=" ชม." onPick={(k) => { DASH.setDrill(k); }} activeKey={DASH.drill} />
+            <DBarH rows={otRows} unit=" ชม." onPick={onDrill ? (r) => onDrill(r.id) : undefined} activeKey={DASH.drill} />
           </div>
         ) : null}
 
@@ -208,7 +208,7 @@ function SecAttendance({ onPeople }) {
             <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
               ขาดงาน รายหน่วยงาน (วัน)
             </div>
-            <DBarH rows={absRows} unit=" วัน" onPick={(k) => { DASH.setDrill(k); }} activeKey={DASH.drill} />
+            <DBarH rows={absRows} unit=" วัน" onPick={onDrill ? (r) => onDrill(r.id) : undefined} activeKey={DASH.drill} />
           </div>
         ) : null}
 
@@ -387,7 +387,7 @@ function DashApp() {
           <SecHeadcount onDrill={onDrill} onPeople={onPeople} />
           <SecTurnover onDrill={onDrill} onPeople={onPeople} />
           <SecRecruit recruit={recruit} />
-          <SecAttendance onPeople={onAttPeople} />
+          <SecAttendance onPeople={onAttPeople} onDrill={onDrill} />
           <SecDemographics onPeople={onPeople} />
         </div>
 
