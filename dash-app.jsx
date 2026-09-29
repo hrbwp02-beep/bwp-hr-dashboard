@@ -131,32 +131,99 @@ function SecRecruit({ recruit }) {
 }
 
 /* ============ 4. การเข้างานและการลา ============ */
-function SecAttendance() {
+function SecAttendance({ onPeople }) {
+  const P = DASH.attPeriod;
+  const S = P ? DASH.attSummary() : null;
+
+  if (!P || !S) {
+    return (
+      <Card>
+        <DHead n="4" color={C4} title="การเข้างานและการลา" sub="Attendance & Leave"
+          right={<Badge cls="b-gray" dot>ยังไม่มีข้อมูล</Badge>} />
+        <div className="card-pad">
+          <DEmpty icon="calendar" text="ยังไม่มีข้อมูลการเข้างานและการลา"
+            sub="นำเข้าไฟล์รายงานตอกบัตรที่ HR Core → เมนู “เวลาทำงานและการลา” แล้วข้อมูลจะขึ้นที่นี่อัตโนมัติ" />
+        </div>
+      </Card>
+    );
+  }
+
+  const types = DASH.attLeaveTypes();
+  const byDept = DASH.attByDept();
+  const otRows = byDept.slice().sort((a, b) => b.otPerHead - a.otPerHead)
+    .map((d) => ({ key: d.key, label: d.label, value: d.otPerHead }));
+  const absRows = byDept.slice().sort((a, b) => b.absent - a.absent).filter((d) => d.absent > 0)
+    .map((d) => ({ key: d.key, label: d.label, value: d.absent }));
+
+  const click = (kind, title) => (onPeople ? () => onPeople(kind, title) : undefined);
+
   return (
     <Card>
       <DHead n="4" color={C4} title="การเข้างานและการลา" sub="Attendance & Leave"
-        right={<Badge cls="b-gray" dot>รอระบบ</Badge>} />
+        right={<Badge cls="b-teal" dot>{P.label || P.id}</Badge>} />
       <div className="card-pad">
-        <DEmpty icon="calendar" text="ยังไม่มีข้อมูลการเข้างานและการลา"
-          sub="ต้องมีระบบลา/บันทึกเวลาทำงานก่อน จึงจะคำนวณอัตราการเข้างาน ขาดงาน วันลา และชั่วโมง OT ได้" />
-        <div style={{ marginTop: 4, borderTop: "1px solid var(--border-2)", paddingTop: 14 }}>
-          <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 9 }}>ตัวชี้วัดที่จะแสดงเมื่อมีข้อมูล</div>
-          <div className="row wrap" style={{ gap: 7 }}>
-            {["อัตราการเข้างาน", "อัตราการขาดงาน", "อัตราการลา", "ชั่วโมง OT ต่อเดือน",
-              "การลาแยกประเภท (ป่วย/กิจ/พักร้อน)", "แนวโน้มการขาดงาน"].map((x) => (
-              <span key={x} style={{ fontSize: 12, padding: "5px 11px", borderRadius: 999,
-                background: "var(--surface-2)", border: "1px dashed var(--border)", color: "var(--text-3)" }}>{x}</span>
-            ))}
+
+        <DStatRow items={[
+          { label: "อัตราการเข้างาน", value: S.attendRate + "%", tone: "#16a34a" },
+          { label: "อัตราการขาดงาน", value: S.absentRate + "%", tone: "#e11d48" },
+          { label: "อัตราการลา", value: S.leaveRate + "%", tone: "#7c3aed" },
+          { label: "OT เฉลี่ย/คน", value: S.otPerHead + " ชม.", tone: "#0891b2" },
+        ]} />
+
+        <div className="row wrap" style={{ gap: 7, marginTop: 10 }}>
+          <button className="chip" onClick={click("absent", "พนักงานที่ขาดงาน · " + (P.label || ""))}>
+            ขาดงานรวม <b>{S.absentDays}</b> วัน
+          </button>
+          <button className="chip" onClick={click("late", "พนักงานที่มาสาย · " + (P.label || ""))}>
+            มาสาย <b>{S.lateCount}</b> ครั้ง
+          </button>
+          <button className="chip" onClick={click("leave", "พนักงานที่ลา · " + (P.label || ""))}>
+            ลารวม <b>{S.leaveDays}</b> วัน
+          </button>
+          <button className="chip" onClick={click("ot", "พนักงานที่ทำ OT · " + (P.label || ""))}>
+            OT รวม <b>{S.otHours}</b> ชม.
+          </button>
+        </div>
+
+        {types.length ? (
+          <div style={{ marginTop: 16 }}>
+            <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
+              การลาแยกประเภท (วัน)
+            </div>
+            <DBarH rows={types} unit=" วัน" />
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.75 }}>
-            ข้อมูลที่ต้องมี: บันทึกการลารายคน (ประเภท · วันที่ · จำนวนวัน) และเวลาเข้า-ออกงาน
-            เมื่อระบบพร้อม แดชบอร์ดนี้จะดึงมาแสดงอัตโนมัติ
+        ) : null}
+
+        {otRows.length > 1 ? (
+          <div style={{ marginTop: 16 }}>
+            <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
+              OT เฉลี่ยต่อคน รายหน่วยงาน (ชม.)
+            </div>
+            <DBarH rows={otRows} unit=" ชม." onPick={(k) => { DASH.setDrill(k); }} activeKey={DASH.drill} />
           </div>
+        ) : null}
+
+        {absRows.length ? (
+          <div style={{ marginTop: 16 }}>
+            <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
+              ขาดงาน รายหน่วยงาน (วัน)
+            </div>
+            <DBarH rows={absRows} unit=" วัน" onPick={(k) => { DASH.setDrill(k); }} activeKey={DASH.drill} />
+          </div>
+        ) : null}
+
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 14, lineHeight: 1.7,
+          borderTop: "1px solid var(--border-2)", paddingTop: 10 }}>
+          ข้อมูล {S.people} คน · วันทำงานเฉลี่ย {S.avgWorkDays} วัน ·
+          นำเข้าเมื่อ {new Date(P.imported_at).toLocaleDateString("th-TH")}
+          {P.note ? " · " + P.note : ""}
+          <br />พนักงานที่ไม่มีในรายงานตอกบัตรจะไม่ถูกนับ
         </div>
       </div>
     </Card>
   );
 }
+
 
 /* ============ 5. โครงสร้างพนักงาน ============ */
 function SecDemographics({ onPeople }) {
@@ -230,6 +297,10 @@ function DashApp() {
   const onPeople = (kind, key, title) => {
     const rows = DASH.listBy(kind, key);
     setPeople({ title, sub: DASH.scopeLabel(), rows });
+  };
+  // รายชื่อจากการ์ดเวลาทำงาน/การลา (ขาดงาน · มาสาย · ลา · OT)
+  const onAttPeople = (kind, title) => {
+    setPeople({ title, sub: DASH.scopeLabel(), rows: DASH.attPeople(kind) });
   };
 
   if (phase === "boot") return (<><DashSplash /><ToastHost /></>);
@@ -310,7 +381,7 @@ function DashApp() {
           <SecHeadcount onDrill={onDrill} onPeople={onPeople} />
           <SecTurnover onDrill={onDrill} onPeople={onPeople} />
           <SecRecruit recruit={recruit} />
-          <SecAttendance />
+          <SecAttendance onPeople={onAttPeople} />
           <SecDemographics onPeople={onPeople} />
         </div>
 

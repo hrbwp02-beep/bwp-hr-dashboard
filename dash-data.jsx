@@ -31,6 +31,102 @@ DASH.loadUser = async () => {
   return DASH.user;
 };
 
+// ---- สรุปการเข้างานและการลา (งวดล่าสุด) ----
+DASH.loadAttendance = async () => {
+  DASH.attPeriod = null; DASH.attRows = [];
+  try {
+    const { data: ps } = await window.sb.from("attendance_periods")
+      .select("*").order("id", { ascending: false }).limit(1);
+    if (!ps || !ps.length) return;
+    DASH.attPeriod = ps[0];
+    const { data: rs } = await window.sb.from("attendance_monthly")
+      .select("*").eq("period_id", ps[0].id);
+    DASH.attRows = rs || [];
+  } catch (e) { DASH.attPeriod = null; DASH.attRows = []; }
+};
+
+// เฉพาะพนักงานที่อยู่ในขอบเขตของผู้ใช้ (และหน่วยงานที่เจาะดูอยู่)
+DASH.attVisible = () => {
+  const ids = {};
+  DASH.visible().forEach((e) => { ids[e.id] = e; });
+  return (DASH.attRows || []).filter((r) => ids[r.employee_id]);
+};
+
+DASH.attSummary = () => {
+  const rows = DASH.attVisible();
+  if (!rows.length) return null;
+  const sum = (f) => rows.reduce((t, r) => t + Number(r[f] || 0), 0);
+  const work = sum("work_days"), absent = sum("absent_days"), leave = sum("total_leave_days");
+  const denom = work + absent + leave;
+  const r1 = (n) => Math.round(n * 10) / 10;
+  return {
+    people: rows.length,
+    workDays: r1(work), absentDays: r1(absent), leaveDays: r1(leave),
+    lateCount: sum("late_count"), lateMinutes: sum("late_minutes"),
+    earlyCount: sum("early_count"),
+    otHours: r1(sum("total_ot_hours")),
+    otPerHead: r1(sum("total_ot_hours") / rows.length),
+    attendRate: denom ? r1((work / denom) * 100) : 0,
+    absentRate: denom ? r1((absent / denom) * 100) : 0,
+    leaveRate: denom ? r1((leave / denom) * 100) : 0,
+    avgWorkDays: r1(work / rows.length),
+  };
+};
+
+// แยกประเภทการลา
+DASH.attLeaveTypes = () => {
+  const rows = DASH.attVisible();
+  const T = [
+    ["ลาป่วย", "sick_days"], ["ลากิจ", "personal_days"], ["พักผ่อนประจำปี", "annual_days"],
+    ["ลาคลอด", "maternity_days"], ["ลาบวช", "ordination_days"], ["ลาอบรม", "training_days"],
+    ["ลาเพื่องานศพ", "funeral_days"], ["อุบัติเหตุในงาน", "accident_days"],
+    ["ลาทหาร", "military_days"], ["ลาเพื่อสมรส", "marriage_days"],
+    ["ลาเพื่อทำหมัน", "sterilize_days"], ["ลาอื่นๆ", "other_days"],
+  ];
+  return T.map(([label, f]) => ({
+    key: f, label,
+    value: Math.round(rows.reduce((t, r) => t + Number(r[f] || 0), 0) * 10) / 10,
+  })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+};
+
+// OT และการขาดงานรายหน่วยงาน
+DASH.attByDept = () => {
+  const rows = DASH.attVisible();
+  const empMap = {};
+  DASH.visible().forEach((e) => { empMap[e.id] = e; });
+  const acc = {};
+  rows.forEach((r) => {
+    const e = empMap[r.employee_id]; if (!e) return;
+    const d = e.dept || "-";
+    acc[d] = acc[d] || { ot: 0, absent: 0, late: 0, leave: 0, n: 0 };
+    acc[d].ot += Number(r.total_ot_hours || 0);
+    acc[d].absent += Number(r.absent_days || 0);
+    acc[d].late += Number(r.late_count || 0);
+    acc[d].leave += Number(r.total_leave_days || 0);
+    acc[d].n += 1;
+  });
+  return (DASH.departments || []).filter((d) => acc[d.id]).map((d) => ({
+    key: d.id, label: d.short || d.name, n: acc[d.id].n,
+    ot: Math.round(acc[d.id].ot), otPerHead: Math.round(acc[d.id].ot / acc[d.id].n),
+    absent: Math.round(acc[d.id].absent * 10) / 10,
+    late: acc[d.id].late,
+    leave: Math.round(acc[d.id].leave * 10) / 10,
+  }));
+};
+
+// รายชื่อสำหรับคลิกดู
+DASH.attPeople = (kind) => {
+  const rows = DASH.attVisible();
+  const empMap = {};
+  DASH.visible().forEach((e) => { empMap[e.id] = e; });
+  const pick = { absent: "absent_days", late: "late_count", leave: "total_leave_days", ot: "total_ot_hours" }[kind];
+  if (!pick) return [];
+  return rows.filter((r) => Number(r[pick] || 0) > 0)
+    .sort((a, b) => Number(b[pick] || 0) - Number(a[pick] || 0))
+    .map((r) => ({ ...(empMap[r.employee_id] || { id: r.employee_id, name: r.employee_id }),
+                   _attValue: Number(r[pick] || 0) }));
+};
+
 DASH.inScope = (deptId) => DASH.scope.all || DASH.scope.depts.indexOf(deptId) > -1;
 
 /* ---------- โหลดข้อมูล ---------- */
@@ -56,6 +152,8 @@ DASH.load = async () => {
 
   DASH.allEmployees = (emps.data || []).map((e) => ({ ...e, _st: DASH.statusOf(e) }));
   DASH.drill = null;                 // หน่วยงานที่กำลังเจาะดู (null = ทั้งขอบเขต)
+
+  await DASH.loadAttendance();       // เวลาทำงาน/การลา — ล้มเหลวได้โดยไม่ทำให้แดชบอร์ดพัง
   return DASH;
 };
 
