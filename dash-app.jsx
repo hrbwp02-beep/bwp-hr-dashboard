@@ -281,6 +281,12 @@ function DashApp() {
       const { data: { session } } = await window.sb.auth.getSession();
       if (!session) { setPhase("login"); return; }
       await DASH.loadUser();
+      if (DASH.unregistered) {
+        setErr("บัญชี " + ((DASH.user || {}).email || "") + " ยังไม่ได้ตั้งสิทธิ์ใช้งานในระบบ"
+          + " (ไม่มีรายชื่อในตาราง app_users) จึงมองไม่เห็นข้อมูลพนักงานใดๆ"
+          + " — โปรดล็อกอินด้วยบัญชีที่ HR กำหนดสิทธิ์ไว้ หรือให้ผู้ดูแลเพิ่มสิทธิ์ให้บัญชีนี้");
+        setPhase("error"); return;
+      }
       await DASH.load();
       setPhase("ready");
       DASH.loadRecruit().then(setRecruit);

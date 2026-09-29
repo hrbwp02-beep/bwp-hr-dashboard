@@ -18,6 +18,7 @@ DASH.loadUser = async () => {
   const email = ((data && data.user && data.user.email) || "").toLowerCase();
   if (!email) return null;
   const { data: u } = await window.sb.from("app_users").select("*").ilike("email", email).maybeSingle();
+  DASH.unregistered = !u;   // มีบัญชีใน Auth แต่ยังไม่ได้ตั้งสิทธิ์ใน app_users
   DASH.user = u || { email, name: email.split("@")[0], role: "viewer" };
 
   // admin/hr เห็นทั้งองค์กร · บทบาทอื่นเห็นเฉพาะหน่วยงานที่รับผิดชอบ
